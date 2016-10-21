@@ -167,7 +167,19 @@ function RegionSelector(callback) {
 		document.addEventListener('mouseup', function(e) {
 			this.endX = e.clientX;
 			this.endY = e.clientY;
-			callback(this.startX, this.startY, this.endX, this.endY);
+			var startX = this.startX;
+			var startY = this.startY;
+			var endX = this.endX;
+			var endY = this.endY;
+			if (startX > endX) {
+				startX = this.endX;
+				endX = this.startX;
+			}
+			if (startY > endY) {
+				startY = this.endY;
+				endY = this.startY;
+			}
+			callback(startX, startY, endX, endY);
 		}.bind(this));
 	};
 };
