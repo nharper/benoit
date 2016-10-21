@@ -123,12 +123,52 @@ function Fractal(canvas) {
 			var re = z_re*z_re - z_im*z_im + a;
 			z_im = 2*z_re*z_im + b;
 			z_re = re;
-			// if (z_re > 2 || z_re < -2 || z_im > 2 || z_im < -2) {
 			if (Math.sqrt(z_re*z_re + z_im*z_im) > 2) {
 				return i / this.iters_;
 			}
 		}
 		return 1;
+	};
+
+	this.resetZoom = function() {
+		this.re_min_ = -2;
+		this.re_max_ = 2;
+		this.im_min_ = -2;
+		this.im_max_ = 2;
+		this.draw();
+	};
+
+	this.zoomToCanvasCoords = function(startX, startY, endX, endY) {
+		startX /= this.canvas_.width;
+		startY /= this.canvas_.height;
+		endX /= this.canvas_.width;
+		endY /= this.canvas_.height;
+		var re_min = this.re_min_ * (1 - startX) + this.re_max_ * startX;
+		this.re_max_ = this.re_min_ * (1 - endX) + this.re_max_ * endX;
+		this.re_min_ = re_min;
+		var im_min = this.im_min_ * endY + this.im_max_ * (1 - endY);
+		this.im_max_ = this.im_min_ * startY + this.im_max_ * (1 - startY);
+		this.im_min_ = im_min;
+		this.draw();
+	}.bind(this);
+};
+
+function RegionSelector(callback) {
+	this.init = function() {
+		this.startX = 0;
+		this.startY = 0;
+		this.endX = 0;
+		this.endY = 0;
+		document.addEventListener('mousedown', function(e) {
+			this.startX = e.clientX;
+			this.startY = e.clientY;
+		}.bind(this));
+
+		document.addEventListener('mouseup', function(e) {
+			this.endX = e.clientX;
+			this.endY = e.clientY;
+			callback(this.startX, this.startY, this.endX, this.endY);
+		}.bind(this));
 	};
 };
 
@@ -144,4 +184,13 @@ window.addEventListener('load', function() {
 		canvas.height = window.innerHeight;
 		fractal.draw();
 	});
+
+	document.addEventListener('keypress', function(e) {
+		if (e.keyCode == 48) {
+			fractal.resetZoom();
+		}
+	});
+
+	var selector = new RegionSelector(fractal.zoomToCanvasCoords);
+	selector.init();
 });
