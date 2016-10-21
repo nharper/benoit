@@ -8,6 +8,13 @@ function drawPixel(ctx, x, y, color) {
 	ctx.stroke();
 }
 
+function drawRect(ctx, x, y, width, height, color) {
+	var g = 255 - color * 255;
+	g = g|0;
+	ctx.fillStyle = 'rgb(' + g + ',' + g + ',' + g + ')';
+	ctx.fillRect(x, y, width, height);
+}
+
 function Fractal(canvas) {
 	this.canvas_ = canvas;
 	this.ctx_ = canvas.getContext('2d');
@@ -19,19 +26,87 @@ function Fractal(canvas) {
 
 	this.iters_ = 100;
 
+	this.draw_callback_id_ = null;
+	this.draw_depth_ = 0;
+
+	// test drawing progressively
 	this.draw = function() {
-		console.log('starting to draw');
-		for (var y = 0; y < this.canvas_.height; y++) {
-			window.setTimeout(function(y) {
-				for (var x = 0; x < this.canvas_.width; x++) {
-					// map the canvas's (x,y) to a point a+bi on the complex plane.
-					var a = x / this.canvas_.width * (this.re_max_ - this.re_min_) + this.re_min_;
-					var b = (1 - y / this.canvas_.height) * (this.im_max_ - this.im_min_) + this.im_min_;
-					drawPixel(this.ctx_, x, y, this.fn_(a, b));
-				}
-			}.bind(this, y), 0);
+		if (this.draw_callback_id_) {
+			window.clearTimeout(this.draw_callback_id_);
 		}
-		console.log('done drawing');
+		// Draws from (left, top) inclusive to (right, bottom) exclusive. It calls
+		// fn(x, y) to get the value to draw at that location. It draws the region
+		// in blocks using the value from the top-left of the block to draw the
+		// whole block.
+		//
+		// y coordinates go from top to bottom, so bottom > top. This is how
+		// <canvas>'s coordinates are set up (postscript is similar), but not
+		// your high school teacher's xy plane
+		//
+		var draw_in_blocks = function(left, top, right, bottom, fn, depth, draw) {
+			if (left == right || top == bottom) {
+				throw new Error("Bounds are touching!");
+			}
+			if (depth < 0) {
+				throw new Error("depth went negative");
+			}
+			// Draw this level
+			if (depth == 0) {
+				if (draw) {
+					// drawPixel(this.ctx_, left, top, fn(left, top));
+					drawRect(this.ctx_, left, top, right - left, bottom - top, fn(left, top));
+				}
+				return true;
+			}
+
+			// If we have a single pixel, there's no need to subdivide further.
+			if (right - left == 1 && bottom - top == 1) {
+				return false;
+			}
+
+			depth--;
+			var r = false;
+
+			// This has an overflow bug. I'm assuming we're not drawing on canvases
+			// that are large enough for this to be an issue.
+			var hSplit = (left + right) / 2|0;
+			var vSplit = (top + bottom) / 2|0;
+
+			// Handle drawing a row of pixels
+			if (bottom - top == 1) {
+				r += draw_in_blocks(left, top, hSplit, bottom, fn, depth, false);
+				r += draw_in_blocks(hSplit, top, right, bottom, fn, depth, true);
+				return r > 0;
+			}
+
+			// Handle drawing a column of pixels
+			if (right - left == 1) {
+				r += draw_in_blocks(left, top, right, vSplit, fn, depth, false);
+				r += draw_in_blocks(left, vSplit, right, bottom, fn, depth, true);
+				return r > 0;
+			}
+
+			r += draw_in_blocks(left, top, hSplit, vSplit, fn, depth, false);
+			r += draw_in_blocks(hSplit, top, right, vSplit, fn, depth, true);
+			r += draw_in_blocks(left, vSplit, hSplit, bottom, fn, depth, true);
+			r += draw_in_blocks(hSplit, vSplit, right, bottom, fn, depth, true);
+			return r > 0;
+		}.bind(this);
+
+		this.draw_depth_ = 0;
+		var timeout_fn = function() {
+			var fn = function(x, y) {
+				var a = x / this.canvas_.width * (this.re_max_ - this.re_min_) + this.re_min_;
+				var b = (1 - y / this.canvas_.height) * (this.im_max_ - this.im_min_) + this.im_min_;
+				return this.fn_(a, b);
+			}.bind(this);
+			if (draw_in_blocks(0, 0, this.canvas_.width, this.canvas_.height, fn,
+												 this.draw_depth_, this.draw_depth_ == 0)) {
+				this.draw_depth_++;
+				this.draw_callback_id_ = window.setTimeout(timeout_fn, 0);
+			}
+		}.bind(this);
+		this.draw_callback_id_ = window.setTimeout(timeout_fn, 0);
 	};
 
 	// The function to draw a point in the set. Takes a point a+bi on the complex
