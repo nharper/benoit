@@ -1,17 +1,5 @@
-function drawPixel(ctx, x, y, color) {
-	var g = 255 - color * 255;
-	g = g|0;
-	ctx.beginPath();
-	ctx.strokeStyle = 'rgb(' + g + ',' + g + ',' + g + ')';
-	ctx.moveTo(x + 0.5, y);
-	ctx.lineTo(x + 0.5, y + 1);
-	ctx.stroke();
-}
-
 function drawRect(ctx, x, y, width, height, color) {
-	var g = 255 - color * 255;
-	g = g|0;
-	ctx.fillStyle = 'rgb(' + g + ',' + g + ',' + g + ')';
+	ctx.fillStyle = color;
 	ctx.fillRect(x, y, width, height);
 }
 
@@ -28,6 +16,13 @@ function Fractal(container) {
 	this.im_max_ = 2;
 
 	this.iters_ = 100;
+
+	this.colors_ = [];
+	for (var i = 0; i < this.iters_; i++) {
+		var g = 255 - i / this.iters_ * 255;
+		g = g|0;
+		this.colors_[i] = 'rgb(' + g + ',' + g + ',' + g + ')';
+	}
 
 	this.draw_callback_id_ = null;
 	this.draw_depth_ = 0;
@@ -49,6 +44,7 @@ function Fractal(container) {
 
 	// test drawing progressively
 	this.draw = function() {
+		this.draw_start_ = performance.now();
 		if (this.draw_callback_id_) {
 			window.clearTimeout(this.draw_callback_id_);
 		}
@@ -72,7 +68,7 @@ function Fractal(container) {
 			if (depth == 0) {
 				if (draw) {
 					// drawPixel(this.ctx_, left, top, fn(left, top));
-					drawRect(this.ctx_, left, top, right - left, bottom - top, fn(left, top));
+					drawRect(this.ctx_, left, top, right - left, bottom - top, this.colors_[fn(left, top)]);
 				}
 				return true;
 			}
@@ -122,6 +118,8 @@ function Fractal(container) {
 												 this.draw_depth_, this.draw_depth_ == 0)) {
 				this.draw_depth_++;
 				this.draw_callback_id_ = window.setTimeout(timeout_fn, 0);
+			} else {
+				console.log("draw() took " + (performance.now() - this.draw_start_) + "ms");
 			}
 		}.bind(this);
 		this.draw_callback_id_ = window.setTimeout(timeout_fn, 0);
@@ -133,7 +131,7 @@ function Fractal(container) {
 	this.mandelbrot = function(a, b) {
 		var z_re = 0;
 		var z_im = 0;
-		for (var i = 0; i < this.iters_; i++) {
+		for (var i = 0; i < this.iters_ - 1; i++) {
 			// compute z = z^2 + a+bi:
 			// z = (z_re + z_im*i)^2 + a + b*i
 			// z = z_re^2 + 2*z_re*z_im*i - z_im^2 + a + b*i
@@ -142,16 +140,16 @@ function Fractal(container) {
 			z_im = 2*z_re*z_im + b;
 			z_re = re;
 			if (Math.sqrt(z_re*z_re + z_im*z_im) > 2) {
-				return i / this.iters_;
+				return i;
 			}
 		}
-		return 1;
+		return i;
 	};
 
 	this.burning_ship = function(a, b) {
 		var z_re = 0;
 		var z_im = 0;
-		for (var i = 0; i < this.iters_; i++) {
+		for (var i = 0; i < this.iters_ - 1; i++) {
 			// z = (|z_re| + i|z_im|)^2 + a + bi
 			// z = z_re^2 + 2|z_re||z_im|i - z_im^2 + a + bi
 			// z = (z_re^2 - z_im^2 + a) + i(2|z_re||z_im| + b)
@@ -159,10 +157,10 @@ function Fractal(container) {
 			z_im = 2*Math.abs(z_re*z_im) - b;
 			z_re = re;
 			if (Math.sqrt(z_re*z_re + z_im*z_im) > 2) {
-				return i / this.iters_;
+				return i;
 			}
 		}
-		return 1;
+		return i;
 	};
 
 	this.fn_ = this.mandelbrot;
