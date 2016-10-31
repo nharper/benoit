@@ -45,6 +45,31 @@ function burningShip(max_iters) {
 	};
 };
 
+// Generates an array of colors, where points is an array of tuples like
+// [R, G, B, end], and the return value is an array of strings 'rgb(...)'.
+// It starts at white for the first color (if one isn't specified).
+function generateColors(points) {
+	var colors = [];
+	var r = 255, g = 255, b = 255;
+	for (var p in points) {
+		var r_next = points[p][0];
+		var g_next = points[p][1];
+		var b_next = points[p][2];
+		var end = points[p][3];
+		var start = colors.length;
+		for (var i = start; i < end; i++) {
+			var scale = (i - start) / (end - start);
+			colors[i] = 'rgb(' + ((r * (1 - scale) + r_next * scale)|0) +
+									',' + ((g * (1 - scale) + g_next * scale)|0) +
+									',' + ((b * (1 - scale) + b_next * scale)|0) + ')';
+		}
+		r = r_next;
+		g = g_next;
+		b = b_next;
+	}
+	return colors;
+}
+
 function Fractal(container) {
 	this.container_ = container;
 	this.canvas_ = document.createElement('canvas');
@@ -59,12 +84,7 @@ function Fractal(container) {
 
 	this.iters_ = 255;
 
-	this.colors_ = [];
-	for (var i = 0; i < this.iters_; i++) {
-		var g = 255 - i / this.iters_ * 255;
-		g = g|0;
-		this.colors_[i] = 'rgb(' + g + ',' + g + ',' + g + ')';
-	}
+	this.colors_ = generateColors([[0, 0, 0, this.iters_]]);
 
 	this.draw_callback_id_ = null;
 	this.draw_depth_ = 0;
@@ -172,6 +192,12 @@ function Fractal(container) {
 
 	this.setFractal = function(fractal) {
 		this.fn_ = fractal(this.iters_ - 1);
+		this.draw();
+	}.bind(this);
+
+	this.setColors = function(colors) {
+		this.colors_ = colors;
+		this.iters_ = colors.length;
 		this.draw();
 	}.bind(this);
 
@@ -334,6 +360,32 @@ function FractalSelector(fractal, container) {
 	this.container_.parentNode.insertBefore(this.select_, this.container_.nextSibling);
 };
 
+function ColorChooser(fractal, container) {
+	this.fractal_ = fractal;
+	this.container_ = container;
+	var colors = [
+		{'name': 'Grayscale', 'points': [[0, 0, 0, 255]]},
+		{'name': 'Orange', 'points': [[255, 255, 127, 0], [255, 127, 0, 63], [191, 0, 0, 127], [0, 0, 0, 255]]},
+		{'name': 'Blue', 'points': [[63, 63, 255, 0], [255, 127, 0, 63], [191, 0, 0, 127], [0, 0, 0, 255]]},
+	];
+
+	this.colors_ = [];
+	for (var i = 0; i < colors.length; i++) {
+		this.colors_[i] = generateColors(colors[i].points);
+	}
+
+	this.select_ = document.createElement('select');
+	for (var i in colors) {
+		var option = document.createElement('option');
+		option.innerText = colors[i].name;
+		this.select_.appendChild(option);
+	}
+	this.select_.addEventListener('change', function() {
+		this.fractal_.setColors(this.colors_[this.select_.selectedIndex]);
+	}.bind(this));
+	this.container_.parentNode.insertBefore(this.select_, this.container_.nextSibling);
+};
+
 window.addEventListener('load', function() {
 	var container = document.getElementById('set-viewer');
 	var fractal = new Fractal(container);
@@ -349,4 +401,5 @@ window.addEventListener('load', function() {
 	selector.init();
 
 	var fractalSelector = new FractalSelector(fractal, container);
+	var colorChooser = new ColorChooser(fractal, container);
 });
