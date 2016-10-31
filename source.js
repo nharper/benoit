@@ -3,6 +3,48 @@ function drawRect(ctx, x, y, width, height, color) {
 	ctx.fillRect(x, y, width, height);
 }
 
+// The function to draw a point in the set. Takes a point a+bi on the complex
+// plane and returns a value between 0 and 1 for the shade to draw - 0 for
+// not in the set, and 1 for in the set.
+function mandelbrot(max_iters) {
+	return function(a, b) {
+		var z_re = 0;
+		var z_im = 0;
+		for (var i = 0; i < max_iters; i++) {
+			// compute z = z^2 + a+bi:
+			// z = (z_re + z_im*i)^2 + a + b*i
+			// z = z_re^2 + 2*z_re*z_im*i - z_im^2 + a + b*i
+			// z = z_re^2 - z_im^2 + a + i*(2*z_re*z_im + b)
+			var re = z_re*z_re - z_im*z_im + a;
+			z_im = 2*z_re*z_im + b;
+			z_re = re;
+			if (Math.sqrt(z_re*z_re + z_im*z_im) > 2) {
+				return i;
+			}
+		}
+		return i;
+	};
+};
+
+function burningShip(max_iters) {
+	return function(a, b) {
+		var z_re = 0;
+		var z_im = 0;
+		for (var i = 0; i < max_iters; i++) {
+			// z = (|z_re| + i|z_im|)^2 + a + bi
+			// z = z_re^2 + 2|z_re||z_im|i - z_im^2 + a + bi
+			// z = (z_re^2 - z_im^2 + a) + i(2|z_re||z_im| + b)
+			var re = z_re*z_re - z_im*z_im + a;
+			z_im = 2*Math.abs(z_re*z_im) - b;
+			z_re = re;
+			if (Math.sqrt(z_re*z_re + z_im*z_im) > 2) {
+				return i;
+			}
+		}
+		return i;
+	};
+};
+
 function Fractal(container) {
 	this.container_ = container;
 	this.canvas_ = document.createElement('canvas');
@@ -125,46 +167,13 @@ function Fractal(container) {
 		this.draw_callback_id_ = window.setTimeout(timeout_fn, 0);
 	};
 
-	// The function to draw a point in the set. Takes a point a+bi on the complex
-	// plane and returns a value between 0 and 1 for the shade to draw - 0 for
-	// not in the set, and 1 for in the set.
-	this.mandelbrot = function(a, b) {
-		var z_re = 0;
-		var z_im = 0;
-		for (var i = 0; i < this.iters_ - 1; i++) {
-			// compute z = z^2 + a+bi:
-			// z = (z_re + z_im*i)^2 + a + b*i
-			// z = z_re^2 + 2*z_re*z_im*i - z_im^2 + a + b*i
-			// z = z_re^2 - z_im^2 + a + i*(2*z_re*z_im + b)
-			var re = z_re*z_re - z_im*z_im + a;
-			z_im = 2*z_re*z_im + b;
-			z_re = re;
-			if (Math.sqrt(z_re*z_re + z_im*z_im) > 2) {
-				return i;
-			}
-		}
-		return i;
-	};
 
-	this.burning_ship = function(a, b) {
-		var z_re = 0;
-		var z_im = 0;
-		for (var i = 0; i < this.iters_ - 1; i++) {
-			// z = (|z_re| + i|z_im|)^2 + a + bi
-			// z = z_re^2 + 2|z_re||z_im|i - z_im^2 + a + bi
-			// z = (z_re^2 - z_im^2 + a) + i(2|z_re||z_im| + b)
-			var re = z_re*z_re - z_im*z_im + a;
-			z_im = 2*Math.abs(z_re*z_im) - b;
-			z_re = re;
-			if (Math.sqrt(z_re*z_re + z_im*z_im) > 2) {
-				return i;
-			}
-		}
-		return i;
-	};
+	this.fn_ = mandelbrot(this.iters_ - 1);
 
-	this.fn_ = this.mandelbrot;
-	// this.fn_ = this.burning_ship;
+	this.setFractal = function(fractal) {
+		this.fn_ = fractal(this.iters_ - 1);
+		this.draw();
+	}.bind(this);
 
 	this.resetZoom = function() {
 		this.re_min_ = -2;
@@ -189,12 +198,12 @@ function Fractal(container) {
 	}.bind(this);
 
 	this.start = function() {
-		this.resize_event_handle_ = window.addEventListener('resize', this.resize);
+		window.addEventListener('resize', this.resize);
 		this.resize();
 	}.bind(this);
 
 	this.stop = function() {
-		window.removeEventListener('resize', this.resize_event_handle_);
+		window.removeEventListener('resize', this.resize);
 	}.bind(this);
 };
 
@@ -210,18 +219,22 @@ function RegionSelector(callback, container) {
 		this.height = this.container_.clientHeight
 				- parseInt(style.paddingTop, 10)
 				- parseInt(style.paddingBottom, 10);
-	};
+	}.bind(this);
 
 	this.start_select_ = function(x, y) {
+		if (x < this.container_.offsetLeft || y < this.container_.offsetTop ||
+				x > this.container_.offsetLeft + this.container_.clientWidth ||
+				y > this.container_.offsetTop + this.container_.clientHeight) {
+			return;
+		}
+
 		this.div_ = document.createElement('div');
 		this.div_.style.position = "absolute";
 		this.div_.style.zIndex = '100';
 		this.div_.className = "selector";
 		this.container_.insertBefore(this.div_, this.container_.firstChild);
 
-		this.move_handle_ = document.addEventListener('mousemove', function(e) {
-			this.update_select_(e.clientX, e.clientY);
-		}.bind(this));
+		document.addEventListener('mousemove', this.update_listener_);
 
 		this.startX = x;
 		this.startY = y;
@@ -251,9 +264,17 @@ function RegionSelector(callback, container) {
 		this.div_.style.height = deltaY + 'px';
 	}.bind(this);
 
+	this.update_listener_ = function(e) {
+		this.update_select_(e.clientX, e.clientY);
+	}.bind(this);
+
 	this.end_select_ = function(x, y) {
-		document.removeEventListener('mousemove', this.move_handle_);
+		if (!this.div_) {
+			return;
+		}
+		document.removeEventListener('mousemove', this.update_listener_);
 		this.div_.remove();
+		this.div_ = null;
 		var sx, sy, ex, ey;
 		if (x < this.startX) {
 			sx = x;
@@ -276,7 +297,7 @@ function RegionSelector(callback, container) {
 	}.bind(this);
 
 	this.init = function() {
-		this.resize_event_handle_ = window.addEventListener('resize', this.resize);
+		window.addEventListener('resize', this.resize);
 		this.resize();
 
 		this.startX = 0;
@@ -294,6 +315,25 @@ function RegionSelector(callback, container) {
 	};
 };
 
+function FractalSelector(fractal, container) {
+	this.fractal_ = fractal;
+	this.container_ = container;
+	this.fractals_ = [
+		{'name': 'Mandelbrot', 'fn': mandelbrot},
+		{'name': 'Burning Ship', 'fn': burningShip},
+	];
+	this.select_ = document.createElement('select');
+	for (var i in this.fractals_) {
+		var option = document.createElement('option');
+		option.innerText = this.fractals_[i].name;
+		this.select_.appendChild(option);
+	}
+	this.select_.addEventListener('change', function() {
+		this.fractal_.setFractal(this.fractals_[this.select_.selectedIndex].fn);
+	}.bind(this));
+	this.container_.parentNode.insertBefore(this.select_, this.container_.nextSibling);
+};
+
 window.addEventListener('load', function() {
 	var container = document.getElementById('set-viewer');
 	var fractal = new Fractal(container);
@@ -307,4 +347,6 @@ window.addEventListener('load', function() {
 
 	var selector = new RegionSelector(fractal.zoomToCanvasCoords, container);
 	selector.init();
+
+	var fractalSelector = new FractalSelector(fractal, container);
 });
