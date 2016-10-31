@@ -15,9 +15,12 @@ function drawRect(ctx, x, y, width, height, color) {
 	ctx.fillRect(x, y, width, height);
 }
 
-function Fractal(canvas) {
-	this.canvas_ = canvas;
-	this.ctx_ = canvas.getContext('2d');
+function Fractal(container) {
+	this.container_ = container;
+	this.canvas_ = document.createElement('canvas');
+	this.canvas_.style.position = "absolute";
+	this.container_.insertBefore(this.canvas_, this.container_.firstChild);
+	this.ctx_ = this.canvas_.getContext('2d');
 
 	this.re_min_ = -2;
 	this.re_max_ = 2;
@@ -28,6 +31,21 @@ function Fractal(canvas) {
 
 	this.draw_callback_id_ = null;
 	this.draw_depth_ = 0;
+
+	this.resize = function() {
+		var style = window.getComputedStyle(this.container_);
+		var width = this.container_.clientWidth
+				- parseInt(style.paddingLeft, 10)
+				- parseInt(style.paddingRight, 10);
+		var height = this.container_.clientHeight
+				- parseInt(style.paddingTop, 10)
+				- parseInt(style.paddingBottom, 10);
+		if (this.canvas_.width != width || this.canvas_.height != height) {
+			this.canvas_.width = width;
+			this.canvas_.height = height;
+			this.draw();
+		}
+	}.bind(this);
 
 	// test drawing progressively
 	this.draw = function() {
@@ -112,7 +130,7 @@ function Fractal(canvas) {
 	// The function to draw a point in the set. Takes a point a+bi on the complex
 	// plane and returns a value between 0 and 1 for the shade to draw - 0 for
 	// not in the set, and 1 for in the set.
-	this.fn_ = function(a, b) {
+	this.mandelbrot = function(a, b) {
 		var z_re = 0;
 		var z_im = 0;
 		for (var i = 0; i < this.iters_; i++) {
@@ -130,6 +148,26 @@ function Fractal(canvas) {
 		return 1;
 	};
 
+	this.burning_ship = function(a, b) {
+		var z_re = 0;
+		var z_im = 0;
+		for (var i = 0; i < this.iters_; i++) {
+			// z = (|z_re| + i|z_im|)^2 + a + bi
+			// z = z_re^2 + 2|z_re||z_im|i - z_im^2 + a + bi
+			// z = (z_re^2 - z_im^2 + a) + i(2|z_re||z_im| + b)
+			var re = z_re*z_re - z_im*z_im + a;
+			z_im = 2*Math.abs(z_re*z_im) - b;
+			z_re = re;
+			if (Math.sqrt(z_re*z_re + z_im*z_im) > 2) {
+				return i / this.iters_;
+			}
+		}
+		return 1;
+	};
+
+	this.fn_ = this.mandelbrot;
+	// this.fn_ = this.burning_ship;
+
 	this.resetZoom = function() {
 		this.re_min_ = -2;
 		this.re_max_ = 2;
@@ -139,6 +177,10 @@ function Fractal(canvas) {
 	};
 
 	this.zoomToCanvasCoords = function(startX, startY, endX, endY) {
+		startX -= this.canvas_.offsetLeft;
+		endX -= this.canvas_.offsetLeft;
+		startY -= this.canvas_.offsetTop;
+		endY -= this.canvas_.offsetTop;
 		startX /= this.canvas_.width;
 		startY /= this.canvas_.height;
 		endX /= this.canvas_.width;
@@ -150,6 +192,15 @@ function Fractal(canvas) {
 		this.im_max_ = this.im_min_ * startY + this.im_max_ * (1 - startY);
 		this.im_min_ = im_min;
 		this.draw();
+	}.bind(this);
+
+	this.start = function() {
+		this.resize_event_handle_ = window.addEventListener('resize', this.resize);
+		this.resize();
+	}.bind(this);
+
+	this.stop = function() {
+		window.removeEventListener('resize', this.resize_event_handle_);
 	}.bind(this);
 };
 
@@ -185,17 +236,8 @@ function RegionSelector(callback) {
 };
 
 window.addEventListener('load', function() {
-	var canvas = document.getElementById('mandelbrot');
-	canvas.width = window.innerWidth;
-	canvas.height = window.innerHeight;
-	var fractal = new Fractal(canvas);
-	fractal.draw();
-
-	window.addEventListener('resize', function() {
-		canvas.width = window.innerWidth;
-		canvas.height = window.innerHeight;
-		fractal.draw();
-	});
+	var fractal = new Fractal(document.getElementById('set-viewer'));
+	fractal.start();
 
 	document.addEventListener('keypress', function(e) {
 		if (e.keyCode == 48) {

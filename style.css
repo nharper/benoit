@@ -1,4 +1,12 @@
+div#set-viewer {
+	border: 2px solid black;
+	margin: 1px;
+	padding: 5px;
+	width: 80%;
+	height: 80%;
+	overflow: scroll;
+}
+
 body {
-	margin: 0;
-	padding: 0;
+	height: 100vh;
 }
