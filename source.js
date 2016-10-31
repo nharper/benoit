@@ -357,7 +357,7 @@ function FractalSelector(fractal, container) {
 	this.select_.addEventListener('change', function() {
 		this.fractal_.setFractal(this.fractals_[this.select_.selectedIndex].fn);
 	}.bind(this));
-	this.container_.parentNode.insertBefore(this.select_, this.container_.nextSibling);
+	this.container_.insertBefore(this.select_, this.container_.firstChild);
 };
 
 function ColorChooser(fractal, container) {
@@ -384,7 +384,7 @@ function ColorChooser(fractal, container) {
 	this.select_.addEventListener('change', function() {
 		this.fractal_.setColors(this.colors_[this.select_.selectedIndex]);
 	}.bind(this));
-	this.container_.parentNode.insertBefore(this.select_, this.container_.nextSibling);
+	this.container_.insertBefore(this.select_, this.container_.firstChild);
 };
 
 window.addEventListener('load', function() {
@@ -401,6 +401,7 @@ window.addEventListener('load', function() {
 	var selector = new RegionSelector(fractal.zoomToCanvasCoords, container);
 	selector.init();
 
-	var fractalSelector = new FractalSelector(fractal, container);
-	var colorChooser = new ColorChooser(fractal, container);
+	var top = document.getElementById('top');
+	var fractalSelector = new FractalSelector(fractal, top);
+	var colorChooser = new ColorChooser(fractal, top);
 });
