@@ -7,6 +7,11 @@ div#set-viewer {
 	overflow: scroll;
 }
 
+div.selector {
+	border: 1px solid black;
+	background-color: rgba(0,0,0,0.1);
+}
+
 body {
 	height: 100vh;
 }

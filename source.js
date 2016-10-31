@@ -15,7 +15,7 @@ function Fractal(container) {
 	this.im_min_ = -2;
 	this.im_max_ = 2;
 
-	this.iters_ = 100;
+	this.iters_ = 255;
 
 	this.colors_ = [];
 	for (var i = 0; i < this.iters_; i++) {
@@ -175,10 +175,6 @@ function Fractal(container) {
 	};
 
 	this.zoomToCanvasCoords = function(startX, startY, endX, endY) {
-		startX -= this.canvas_.offsetLeft;
-		endX -= this.canvas_.offsetLeft;
-		startY -= this.canvas_.offsetTop;
-		endY -= this.canvas_.offsetTop;
 		startX /= this.canvas_.width;
 		startY /= this.canvas_.height;
 		endX /= this.canvas_.width;
@@ -202,39 +198,105 @@ function Fractal(container) {
 	}.bind(this);
 };
 
-function RegionSelector(callback) {
+function RegionSelector(callback, container) {
+	this.callback_ = callback;
+	this.container_ = container;
+
+	this.resize = function() {
+		var style = window.getComputedStyle(this.container_);
+		this.width = this.container_.clientWidth
+				- parseInt(style.paddingLeft, 10)
+				- parseInt(style.paddingRight, 10);
+		this.height = this.container_.clientHeight
+				- parseInt(style.paddingTop, 10)
+				- parseInt(style.paddingBottom, 10);
+	};
+
+	this.start_select_ = function(x, y) {
+		this.div_ = document.createElement('div');
+		this.div_.style.position = "absolute";
+		this.div_.style.zIndex = '100';
+		this.div_.className = "selector";
+		this.container_.insertBefore(this.div_, this.container_.firstChild);
+
+		this.move_handle_ = document.addEventListener('mousemove', function(e) {
+			this.update_select_(e.clientX, e.clientY);
+		}.bind(this));
+
+		this.startX = x;
+		this.startY = y;
+		this.div_.style.left = this.startX + 'px';
+		this.div_.style.top = this.startY + 'px';
+	}.bind(this);
+
+	this.update_select_ = function(x, y) {
+		var left, deltaX, top, deltaY;
+		if (x < this.startX) {
+			left = x;
+			deltaX = this.startX - x;
+		} else {
+			left = this.startX;
+			deltaX = x - this.startX;
+		}
+		if (y < this.startY) {
+			top = y;
+			deltaY = this.startY - y;
+		} else {
+			top = this.startY;
+			deltaY = y - this.startY;
+		}
+		this.div_.style.left = left + 'px';
+		this.div_.style.width = deltaX + 'px';
+		this.div_.style.top = top + 'px';
+		this.div_.style.height = deltaY + 'px';
+	}.bind(this);
+
+	this.end_select_ = function(x, y) {
+		document.removeEventListener('mousemove', this.move_handle_);
+		this.div_.remove();
+		var sx, sy, ex, ey;
+		if (x < this.startX) {
+			sx = x;
+			ex = this.startX;
+		} else {
+			sx = this.startX;
+			ex = x;
+		}
+		if (y < this.startY) {
+			sy = y;
+			ey = this.startY;
+		} else {
+			sy = this.startY;
+			ey = y;
+		}
+		this.callback_(sx - this.container_.offsetLeft,
+									 sy - this.container_.offsetTop,
+									 ex - this.container_.offsetLeft,
+									 ey - this.container_.offsetTop);
+	}.bind(this);
+
 	this.init = function() {
+		this.resize_event_handle_ = window.addEventListener('resize', this.resize);
+		this.resize();
+
 		this.startX = 0;
 		this.startY = 0;
 		this.endX = 0;
 		this.endY = 0;
 		document.addEventListener('mousedown', function(e) {
-			this.startX = e.clientX;
-			this.startY = e.clientY;
+			this.start_select_(e.clientX, e.clientY);
 		}.bind(this));
 
+
 		document.addEventListener('mouseup', function(e) {
-			this.endX = e.clientX;
-			this.endY = e.clientY;
-			var startX = this.startX;
-			var startY = this.startY;
-			var endX = this.endX;
-			var endY = this.endY;
-			if (startX > endX) {
-				startX = this.endX;
-				endX = this.startX;
-			}
-			if (startY > endY) {
-				startY = this.endY;
-				endY = this.startY;
-			}
-			callback(startX, startY, endX, endY);
+			this.end_select_(e.clientX, e.clientY);
 		}.bind(this));
 	};
 };
 
 window.addEventListener('load', function() {
-	var fractal = new Fractal(document.getElementById('set-viewer'));
+	var container = document.getElementById('set-viewer');
+	var fractal = new Fractal(container);
 	fractal.start();
 
 	document.addEventListener('keypress', function(e) {
@@ -243,6 +305,6 @@ window.addEventListener('load', function() {
 		}
 	});
 
-	var selector = new RegionSelector(fractal.zoomToCanvasCoords);
+	var selector = new RegionSelector(fractal.zoomToCanvasCoords, container);
 	selector.init();
 });
