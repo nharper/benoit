@@ -3,48 +3,6 @@ function drawRect(ctx, x, y, width, height, color) {
 	ctx.fillRect(x, y, width, height);
 }
 
-// The function to draw a point in the set. Takes a point a+bi on the complex
-// plane and returns a value between 0 and 1 for the shade to draw - 0 for
-// not in the set, and 1 for in the set.
-function mandelbrot(max_iters) {
-	return function(a, b) {
-		var z_re = 0;
-		var z_im = 0;
-		for (var i = 0; i < max_iters; i++) {
-			// compute z = z^2 + a+bi:
-			// z = (z_re + z_im*i)^2 + a + b*i
-			// z = z_re^2 + 2*z_re*z_im*i - z_im^2 + a + b*i
-			// z = z_re^2 - z_im^2 + a + i*(2*z_re*z_im + b)
-			var re = z_re*z_re - z_im*z_im + a;
-			z_im = 2*z_re*z_im + b;
-			z_re = re;
-			if (Math.sqrt(z_re*z_re + z_im*z_im) > 2) {
-				return i;
-			}
-		}
-		return i;
-	};
-};
-
-function burningShip(max_iters) {
-	return function(a, b) {
-		var z_re = 0;
-		var z_im = 0;
-		for (var i = 0; i < max_iters; i++) {
-			// z = (|z_re| + i|z_im|)^2 + a + bi
-			// z = z_re^2 + 2|z_re||z_im|i - z_im^2 + a + bi
-			// z = (z_re^2 - z_im^2 + a) + i(2|z_re||z_im| + b)
-			var re = z_re*z_re - z_im*z_im + a;
-			z_im = 2*Math.abs(z_re*z_im) - b;
-			z_re = re;
-			if (Math.sqrt(z_re*z_re + z_im*z_im) > 2) {
-				return i;
-			}
-		}
-		return i;
-	};
-};
-
 // Generates an array of colors, where points is an array of tuples like
 // [R, G, B, end], and the return value is an array of strings 'rgb(...)'.
 // It starts at white for the first color (if one isn't specified).
@@ -86,8 +44,7 @@ function Fractal(container) {
 
 	this.colors_ = generateColors([[0, 0, 0, this.iters_]]);
 
-	this.draw_callback_id_ = null;
-	this.draw_depth_ = 0;
+	this.worker_ = new Worker('worker.js');
 
 	this.resize = function() {
 		var style = window.getComputedStyle(this.container_);
@@ -104,94 +61,36 @@ function Fractal(container) {
 		}
 	}.bind(this);
 
-	// test drawing progressively
 	this.draw = function() {
-		this.draw_start_ = performance.now();
-		if (this.draw_callback_id_) {
-			window.clearTimeout(this.draw_callback_id_);
+		this.ui_thread_time_ = 0;
+		if (!this.started_) {
+			return;
 		}
-		// Draws from (left, top) inclusive to (right, bottom) exclusive. It calls
-		// fn(x, y) to get the value to draw at that location. It draws the region
-		// in blocks using the value from the top-left of the block to draw the
-		// whole block.
-		//
-		// y coordinates go from top to bottom, so bottom > top. This is how
-		// <canvas>'s coordinates are set up (postscript is similar), but not
-		// your high school teacher's xy plane
-		//
-		var draw_in_blocks = function(left, top, right, bottom, fn, depth, draw) {
-			if (left == right || top == bottom) {
-				throw new Error("Bounds are touching!");
-			}
-			if (depth < 0) {
-				throw new Error("depth went negative");
-			}
-			// Draw this level
-			if (depth == 0) {
-				if (draw) {
-					// drawPixel(this.ctx_, left, top, fn(left, top));
-					drawRect(this.ctx_, left, top, right - left, bottom - top, this.colors_[fn(left, top)]);
-				}
-				return true;
-			}
+		this.draw_start_ = performance.now();
 
-			// If we have a single pixel, there's no need to subdivide further.
-			if (right - left == 1 && bottom - top == 1) {
-				return false;
-			}
-
-			depth--;
-			var r = false;
-
-			// This has an overflow bug. I'm assuming we're not drawing on canvases
-			// that are large enough for this to be an issue.
-			var hSplit = (left + right) / 2|0;
-			var vSplit = (top + bottom) / 2|0;
-
-			// Handle drawing a row of pixels
-			if (bottom - top == 1) {
-				r += draw_in_blocks(left, top, hSplit, bottom, fn, depth, false);
-				r += draw_in_blocks(hSplit, top, right, bottom, fn, depth, true);
-				return r > 0;
-			}
-
-			// Handle drawing a column of pixels
-			if (right - left == 1) {
-				r += draw_in_blocks(left, top, right, vSplit, fn, depth, false);
-				r += draw_in_blocks(left, vSplit, right, bottom, fn, depth, true);
-				return r > 0;
-			}
-
-			r += draw_in_blocks(left, top, hSplit, vSplit, fn, depth, false);
-			r += draw_in_blocks(hSplit, top, right, vSplit, fn, depth, true);
-			r += draw_in_blocks(left, vSplit, hSplit, bottom, fn, depth, true);
-			r += draw_in_blocks(hSplit, vSplit, right, bottom, fn, depth, true);
-			return r > 0;
-		}.bind(this);
-
-		this.draw_depth_ = 0;
-		var timeout_fn = function() {
-			var fn = function(x, y) {
-				var a = x / this.canvas_.width * (this.re_max_ - this.re_min_) + this.re_min_;
-				var b = (1 - y / this.canvas_.height) * (this.im_max_ - this.im_min_) + this.im_min_;
-				return this.fn_(a, b);
-			}.bind(this);
-			if (draw_in_blocks(0, 0, this.canvas_.width, this.canvas_.height, fn,
-												 this.draw_depth_, this.draw_depth_ == 0)) {
-				this.draw_depth_++;
-				this.draw_callback_id_ = window.setTimeout(timeout_fn, 0);
-			} else {
-				console.log("draw() took " + (performance.now() - this.draw_start_) + "ms");
-			}
-		}.bind(this);
-		this.draw_callback_id_ = window.setTimeout(timeout_fn, 0);
+		this.worker_.postMessage([this.fractal_index_, this.iters_ - 1, this.canvas_.width, this.canvas_.height, this.re_min_, this.re_max_, this.im_min_, this.im_max_]);
 	};
 
+	this.finish_draw_ = function(e) {
+		var res = e.data;
+		if (res === true) {
+			console.log("draw() took " + (performance.now() - this.draw_start_) + "ms, of which " + this.ui_thread_time_ + "ms was on the UI thread");
+			return;
+		}
+		var draw_start = performance.now();
+		for (var x = 0; x < res.w.length - 1; x++) {
+			for (var y = 0; y < res.h.length - 1; y++) {
+				drawRect(this.ctx_, res.w[x], res.h[y], res.w[x + 1] - res.w[x], res.h[y + 1] - res.h[y], this.colors_[res.data[x][y]]);
+			}
+		}
+		var draw_time = performance.now() - draw_start;
+		console.log('spent ' + draw_time + 'ms on UI thread');
+		this.ui_thread_time_ += draw_time;
+	}.bind(this);
+	this.worker_.onmessage = this.finish_draw_;
 
-	this.fn_ = mandelbrot(this.iters_ - 1);
-
-	this.setFractal = function(fractal) {
-		this.fn_ = fractal(this.iters_ - 1);
+	this.setFractal = function(fractal_index) {
+		this.fractal_index_ = fractal_index;
 		this.draw();
 	}.bind(this);
 
@@ -224,6 +123,7 @@ function Fractal(container) {
 	}.bind(this);
 
 	this.start = function() {
+		this.started_ = true;
 		window.addEventListener('resize', this.resize);
 		this.resize();
 	}.bind(this);
@@ -344,10 +244,7 @@ function RegionSelector(callback, container) {
 function FractalSelector(fractal, container) {
 	this.fractal_ = fractal;
 	this.container_ = container;
-	this.fractals_ = [
-		{'name': 'Mandelbrot', 'fn': mandelbrot},
-		{'name': 'Burning Ship', 'fn': burningShip},
-	];
+	this.fractals_ = fractals;
 	this.select_ = document.createElement('select');
 	for (var i in this.fractals_) {
 		var option = document.createElement('option');
@@ -355,7 +252,7 @@ function FractalSelector(fractal, container) {
 		this.select_.appendChild(option);
 	}
 	this.select_.addEventListener('change', function() {
-		this.fractal_.setFractal(this.fractals_[this.select_.selectedIndex].fn);
+		this.fractal_.setFractal(this.select_.selectedIndex);
 	}.bind(this));
 	this.container_.insertBefore(this.select_, this.container_.firstChild);
 };
@@ -390,6 +287,7 @@ function ColorChooser(fractal, container) {
 window.addEventListener('load', function() {
 	var container = document.getElementById('set-viewer');
 	var fractal = new Fractal(container);
+	fractal.setFractal(0);
 	fractal.start();
 
 	document.addEventListener('keypress', function(e) {
