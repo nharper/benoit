@@ -1,11 +1,7 @@
-function drawRect(ctx, x, y, width, height, color) {
-	ctx.fillStyle = color;
-	ctx.fillRect(x, y, width, height);
-}
-
 // Generates an array of colors, where points is an array of tuples like
 // [R, G, B, end], and the return value is an array of strings 'rgb(...)'.
 // It starts at white for the first color (if one isn't specified).
+// TODO: documentation is wrong, it returns array of arrays [R, G, B].
 function generateColors(points) {
 	var colors = [];
 	var r = 255, g = 255, b = 255;
@@ -17,9 +13,9 @@ function generateColors(points) {
 		var start = colors.length;
 		for (var i = start; i < end; i++) {
 			var scale = (i - start) / (end - start);
-			colors[i] = 'rgb(' + ((r * (1 - scale) + r_next * scale)|0) +
-									',' + ((g * (1 - scale) + g_next * scale)|0) +
-									',' + ((b * (1 - scale) + b_next * scale)|0) + ')';
+			colors[i] = [(r * (1 - scale) + r_next * scale)|0,
+									 (g * (1 - scale) + g_next * scale)|0,
+									 (b * (1 - scale) + b_next * scale)|0];
 		}
 		r = r_next;
 		g = g_next;
@@ -44,8 +40,6 @@ function Fractal(container) {
 
 	this.colors_ = generateColors([[0, 0, 0, this.iters_]]);
 
-	this.worker_ = new Worker('worker.js');
-
 	this.resize = function() {
 		var style = window.getComputedStyle(this.container_);
 		var width = this.container_.clientWidth
@@ -62,13 +56,27 @@ function Fractal(container) {
 	}.bind(this);
 
 	this.draw = function() {
+		if (this.worker_) {
+			this.worker_.terminate();
+		}
+		this.worker_ = new Worker('worker.js');
+		this.worker_.onmessage = this.finish_draw_;
 		this.ui_thread_time_ = 0;
 		if (!this.started_) {
 			return;
 		}
 		this.draw_start_ = performance.now();
 
-		this.worker_.postMessage([this.fractal_index_, this.iters_ - 1, this.canvas_.width, this.canvas_.height, this.re_min_, this.re_max_, this.im_min_, this.im_max_]);
+		var args = {
+			'fractal': this.fractal_index_,
+			'depth': this.iters_ -1,
+			'width': this.canvas_.width,
+			'height': this.canvas_.height,
+			'min': [this.re_min_, this.im_min_],
+			'max': [this.re_max_, this.im_max_],
+			'colors': this.colors_
+		};
+		this.worker_.postMessage(args);
 	};
 
 	this.finish_draw_ = function(e) {
@@ -78,16 +86,11 @@ function Fractal(container) {
 			return;
 		}
 		var draw_start = performance.now();
-		for (var x = 0; x < res.w.length - 1; x++) {
-			for (var y = 0; y < res.h.length - 1; y++) {
-				drawRect(this.ctx_, res.w[x], res.h[y], res.w[x + 1] - res.w[x], res.h[y + 1] - res.h[y], this.colors_[res.data[x][y]]);
-			}
-		}
+		this.ctx_.putImageData(res, 0, 0);
 		var draw_time = performance.now() - draw_start;
 		console.log('spent ' + draw_time + 'ms on UI thread');
 		this.ui_thread_time_ += draw_time;
 	}.bind(this);
-	this.worker_.onmessage = this.finish_draw_;
 
 	this.setFractal = function(fractal_index) {
 		this.fractal_index_ = fractal_index;
