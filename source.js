@@ -158,6 +158,9 @@ function RegionSelector(callback, container) {
 			return;
 		}
 
+		if (this.div_) {
+			this.div_.remove();
+		}
 		this.div_ = document.createElement('div');
 		this.div_.style.position = "absolute";
 		this.div_.style.zIndex = '100';
