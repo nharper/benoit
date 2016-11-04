@@ -202,10 +202,10 @@ function RegionSelector(callback, container) {
 	}.bind(this);
 
 	this.end_select_ = function(x, y) {
+		document.removeEventListener('mousemove', this.update_listener_);
 		if (!this.div_) {
 			return;
 		}
-		document.removeEventListener('mousemove', this.update_listener_);
 		this.div_.remove();
 		this.div_ = null;
 		var sx, sy, ex, ey;
@@ -222,6 +222,9 @@ function RegionSelector(callback, container) {
 		} else {
 			sy = this.startY;
 			ey = y;
+		}
+		if (sx == ex || sy == ey) {
+			return;
 		}
 		this.callback_(sx - this.container_.offsetLeft,
 									 sy - this.container_.offsetTop,
