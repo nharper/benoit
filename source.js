@@ -52,11 +52,15 @@ function Fractal(container) {
 		if (this.canvas_.width != width || this.canvas_.height != height) {
 			this.canvas_.width = width;
 			this.canvas_.height = height;
-			this.draw();
+			// zoomToComplexCoords will redraw
+			this.zoomToComplexCoords(this.re_min_, this.im_min_, this.re_max_, this.im_max_);
 		}
 	}.bind(this);
 
 	this.draw = function() {
+		if (!this.started_) {
+			return;
+		}
 		if (this.worker_) {
 			this.worker_.terminate();
 		}
@@ -105,24 +109,44 @@ function Fractal(container) {
 	}.bind(this);
 
 	this.resetZoom = function() {
-		this.re_min_ = -2;
-		this.re_max_ = 2;
-		this.im_min_ = -2;
-		this.im_max_ = 2;
-		this.draw();
+		this.zoomToComplexCoords(-2, -2, 2, 2);
 	};
 
+	// Converts canvas coords to complex-plane coords and calls
+	// zoomToComplexCoords with the complex-plane coords.
 	this.zoomToCanvasCoords = function(startX, startY, endX, endY) {
 		startX /= this.canvas_.width;
 		startY /= this.canvas_.height;
 		endX /= this.canvas_.width;
 		endY /= this.canvas_.height;
 		var re_min = this.re_min_ * (1 - startX) + this.re_max_ * startX;
-		this.re_max_ = this.re_min_ * (1 - endX) + this.re_max_ * endX;
-		this.re_min_ = re_min;
+		var re_max = this.re_min_ * (1 - endX) + this.re_max_ * endX;
 		var im_min = this.im_min_ * endY + this.im_max_ * (1 - endY);
-		this.im_max_ = this.im_min_ * startY + this.im_max_ * (1 - startY);
-		this.im_min_ = im_min;
+		var im_max = this.im_min_ * startY + this.im_max_ * (1 - startY);
+		this.zoomToComplexCoords(re_min, im_min, re_max, im_max);
+		this.draw();
+	}.bind(this);
+
+	// Zooms the view to be centered on the provided region with the entire region
+	// and a 1:1 aspect ratio.
+	this.zoomToComplexCoords = function(re_min, im_min, re_max, im_max) {
+		var re_center = (re_min + re_max) / 2;
+		var im_center = (im_min + im_max) / 2;
+		// scale is how many units of re or im per pixel.
+		var re_scale = (re_max - re_min) / this.canvas_.width;
+		var im_scale = (im_max - im_min) / this.canvas_.height;
+		var scale;
+		if (re_scale > im_scale) {
+			scale = re_scale;
+		} else {
+			scale = im_scale;
+		}
+		var re_delta = scale * this.canvas_.width / 2;
+		this.re_min_ = re_center - re_delta;
+		this.re_max_ = re_center + re_delta;
+		var im_delta = scale * this.canvas_.height / 2;
+		this.im_min_ = im_center - im_delta;
+		this.im_max_ = im_center + im_delta;
 		this.draw();
 	}.bind(this);
 
